@@ -1,0 +1,220 @@
+cat("╔═══════════════════════════════════════════════════════════════════╗\n")
+cat("║        🔧 NAPRAWA PROBLEMU Z WIZUALIZACJĄ                        ║\n")
+cat("║        Brakuje: rnaturalearth, rgdal                             ║\n")
+cat("║        Problem: ne_countries() nie znaleziona                    ║\n")
+cat("╚═══════════════════════════════════════════════════════════════════╝\n\n")
+
+cat("KROK 1: INSTALACJA BRAKUJĄCYCH PAKIETÓW\n")
+cat("─────────────────────────────────────────────────────────────────\n\n")
+
+# Zainstaluj brakujące pakiety
+packages_to_install <- c("rnaturalearth", "rnaturalearthdata")
+
+for(pkg in packages_to_install) {
+  if(!require(pkg, character.only=TRUE)) {
+    cat("→ Instaluję", pkg, "...\n")
+    install.packages(pkg, dependencies=TRUE)
+  }
+}
+
+cat("\n✓ Pakiety zainstalowane!\n\n")
+
+cat("════════════════════════════════════════════════════════════════════\n\n")
+
+cat("KROK 2: ZAŁADOWANIE BIBLIOTEK\n")
+cat("─────────────────────────────────────────────────────────────────\n\n")
+
+library(terra)
+library(ggplot2)
+library(viridis)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+cat("✓ Wszystkie biblioteki załadowane!\n\n")
+
+cat("════════════════════════════════════════════════════════════════════\n\n")
+
+cat("KROK 3: PRZYGOTOWANIE DANYCH\n")
+cat("─────────────────────────────────────────────────────────────────\n\n")
+
+base_folder <- "C:/Users/abudz/Documents/Domasław/Strontium PAN/Strontium PAN/Mapping/Notebook Isoscape/Dane do Isoscape"
+output_folder <- file.path(base_folder, "Sr_ISOSCAPE_FINAL")
+
+# Załaduj raster
+sr_central_hires <- rast(file.path(output_folder, "Sr_ISOSCAPE_CENTRAL_EUROPE_HIRES.tif"))
+
+# Konwertuj do data.frame
+sr_df <- as.data.frame(sr_central_hires, xy=TRUE)
+colnames(sr_df) <- c("x", "y", "Sr_ratio")
+sr_df <- sr_df[!is.na(sr_df$Sr_ratio), ]
+
+cat("✓ Dane przygotowane:\n")
+cat("  Pikseli:", nrow(sr_df), "\n")
+cat("  Sr range:", round(min(sr_df$Sr_ratio), 6), "-", 
+    round(max(sr_df$Sr_ratio), 6), "\n\n")
+
+# Załaduj granice krajów
+cat("Ładuję granice krajów...\n\n")
+world <- ne_countries(scale=50, returnclass="sf")
+
+cat("✓ Załadowano!\n\n")
+
+cat("════════════════════════════════════════════════════════════════════\n\n")
+
+cat("KROK 4: GENEROWANIE MAP\n")
+cat("─────────────────────────────────────  ───────────────────────────\n\n")
+
+# ════════════════════════════════════════════════════════════════════════════
+# MAP 1: Sr WARTOŚCI - CONTINUOUS
+# ════════════════════════════════════════════════════════════════════════════
+
+cat("→ Generuję MAP 1: Sr WARTOŚCI (kontinualne)\n\n")
+
+map1 <- ggplot(sr_df, aes(x=x, y=y, fill=Sr_ratio)) +
+  geom_raster() +
+  geom_sf(data=world, fill=NA, color="black", linewidth=0.3, inherit.aes=FALSE) +
+  scale_fill_viridis(name="87Sr/86Sr\nRatio", option="plasma", limits=c(0.704, 0.737)) +
+  coord_sf(xlim=c(4, 26), ylim=c(47, 56), expand=FALSE) +
+  theme_minimal() +
+  labs(title="Sr ISOSCAPE - CENTRAL EUROPE",
+       subtitle="87Sr/86Sr Ratio Distribution",
+       x="Longitude (°E)", y="Latitude (°N)") +
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5),
+        plot.subtitle=element_text(size=11, hjust=0.5),
+        axis.title=element_text(size=10),
+        legend.position="right")
+
+print(map1)
+cat("✓ MAP 1 wyświetlona!\n\n")
+
+# ════════════════════════════════════════════════════════════════════════════
+# MAP 2: Sr KLASYFIKACJA - 5 KLAS
+# ════════════════════════════════════════════════════════════════════════════
+
+cat("→ Generuję MAP 2: Sr KLASYFIKACJA (5 klas)\n\n")
+
+sr_df$Sr_class <- cut(sr_df$Sr_ratio,
+                       breaks=quantile(sr_df$Sr_ratio, probs=seq(0,1,0.2), na.rm=TRUE),
+                       labels=c("Very Low\n(0.704-0.709)",
+                               "Low\n(0.709-0.711)",
+                               "Medium\n(0.711-0.713)",
+                               "High\n(0.713-0.721)",
+                               "Very High\n(0.721-0.737)"),
+                       include.lowest=TRUE)
+
+map2 <- ggplot(sr_df, aes(x=x, y=y, fill=Sr_class)) +
+  geom_raster() +
+  geom_sf(data=world, fill=NA, color="black", linewidth=0.3, inherit.aes=FALSE) +
+  scale_fill_brewer(palette="RdYlBu", name="Sr Class") +
+  coord_sf(xlim=c(4, 26), ylim=c(47, 56), expand=FALSE) +
+  theme_minimal() +
+  labs(title="Sr CLASSIFICATION - CENTRAL EUROPE",
+       subtitle="5 Classes Based on Quantiles") +
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5),
+        plot.subtitle=element_text(size=11, hjust=0.5),
+        legend.position="right")
+
+print(map2)
+cat("✓ MAP 2 wyświetlona!\n\n")
+
+# ════════════════════════════════════════════════════════════════════════════
+# MAP 3: Sr ROZKŁAD - HISTOGRAM
+# ════════════════════════════════════════════════════════════════════════════
+
+cat("→ Generuję MAP 3: ROZKŁAD Sr (histogram)\n\n")
+
+map3 <- ggplot(sr_df, aes(x=Sr_ratio)) +
+  geom_histogram(aes(y=after_stat(density)), bins=100, fill="steelblue", alpha=0.7, color="black") +
+  geom_density(color="red", linewidth=1.5) +
+  geom_vline(aes(xintercept=mean(Sr_ratio)), color="green", linetype="dashed", linewidth=1.2) +
+  geom_vline(aes(xintercept=median(Sr_ratio)), color="orange", linetype="dashed", linewidth=1.2) +
+  labs(title="Sr DISTRIBUTION - CENTRAL EUROPE",
+       subtitle=sprintf("Mean: %.6f | Median: %.6f | Std: %.6f",
+                       mean(sr_df$Sr_ratio), median(sr_df$Sr_ratio), sd(sr_df$Sr_ratio)),
+       x="87Sr/86Sr Ratio", y="Density") +
+  theme_minimal() +
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5),
+        plot.subtitle=element_text(size=10, hjust=0.5),
+        axis.title=element_text(size=10))
+
+print(map3)
+cat("✓ MAP 3 wyświetlona!\n\n")
+
+# ════════════════════════════════════════════════════════════════════════════
+# MAP 4: Sr IZOLINY (CONTOURS)
+# ════════════════════════════════════════════════════════════════════════════
+
+cat("→ Generuję MAP 4: Sr IZOLINY (contours)\n\n")
+
+map4 <- ggplot(sr_df, aes(x=x, y=y, z=Sr_ratio)) +
+  stat_contour(aes(color=after_stat(level)), linewidth=1.2, bins=15) +
+  geom_raster(aes(fill=Sr_ratio), alpha=0.3, inherit.aes=TRUE) +
+  geom_sf(data=world, fill=NA, color="black", linewidth=0.3, inherit.aes=FALSE) +
+  scale_fill_viridis(name="Sr Ratio", option="plasma", guide="none") +
+  scale_color_viridis(name="Sr Ratio") +
+  coord_sf(xlim=c(4, 26), ylim=c(47, 56), expand=FALSE) +
+  theme_minimal() +
+  labs(title="Sr CONTOURS - CENTRAL EUROPE",
+       subtitle="Strontium Isoline Patterns") +
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5),
+        plot.subtitle=element_text(size=11, hjust=0.5),
+        legend.position="right")
+
+print(map4)
+cat("✓ MAP 4 wyświetlona!\n\n")
+
+# ════════════════════════════════════════════════════════════════════════════
+# MAP 5: Sr ANOMALIE (DEVIATION FROM MEAN)
+# ════════════════════════════════════════════════════════════════════════════
+
+cat("→ Generuję MAP 5: Sr ANOMALIE (deviacja od średniej)\n\n")
+
+global_mean <- mean(sr_df$Sr_ratio, na.rm=TRUE)
+sr_df$Sr_anomaly <- sr_df$Sr_ratio - global_mean
+
+map5 <- ggplot(sr_df, aes(x=x, y=y, fill=Sr_anomaly)) +
+  geom_raster() +
+  geom_sf(data=world, fill=NA, color="black", linewidth=0.3, inherit.aes=FALSE) +
+  scale_fill_gradient2(low="blue", mid="white", high="red", 
+                      midpoint=0, name="Anomaly\n(Sr - Mean)") +
+  coord_sf(xlim=c(4, 26), ylim=c(47, 56), expand=FALSE) +
+  theme_minimal() +
+  labs(title="Sr ANOMALIES - CENTRAL EUROPE",
+       subtitle=sprintf("Mean: %.6f | Blue = Low | Red = High", global_mean)) +
+  theme(plot.title=element_text(size=14, face="bold", hjust=0.5),
+        plot.subtitle=element_text(size=11, hjust=0.5),
+        legend.position="right")
+
+print(map5)
+cat("✓ MAP 5 wyświetlona!\n\n")
+
+cat("════════════════════════════════════════════════════════════════════\n\n")
+
+cat("STATYSTYKA FINALNA\n")
+cat("─────────────────────────────────────────────────────────────────\n\n")
+
+cat("DESCRIPTIVE STATISTICS:\n")
+cat("  Min:", round(min(sr_df$Sr_ratio), 6), "\n")
+cat("  Q1:", round(quantile(sr_df$Sr_ratio, 0.25), 6), "\n")
+cat("  Median:", round(median(sr_df$Sr_ratio), 6), "\n")
+cat("  Q3:", round(quantile(sr_df$Sr_ratio, 0.75), 6), "\n")
+cat("  Max:", round(max(sr_df$Sr_ratio), 6), "\n")
+cat("  Mean:", round(mean(sr_df$Sr_ratio), 6), "\n")
+cat("  Std Dev:", round(sd(sr_df$Sr_ratio), 6), "\n")
+cat("  Range:", round(max(sr_df$Sr_ratio) - min(sr_df$Sr_ratio), 6), "\n\n")
+
+cat("════════════════════════════════════════════════════════════════════\n\n")
+
+cat("✅ WIZUALIZACJA COMPLETE!\n\n")
+
+cat("5 MAP WYGENEROWANYCH:\n")
+cat("  1. ✓ Sr Values (Continuous - Plasma colorscale)\n")
+cat("  2. ✓ Sr Classification (5 Classes - RdYlBu colorscale)\n")
+cat("  3. ✓ Sr Distribution (Histogram + Density)\n")
+cat("  4. ✓ Sr Contours (Isolines)\n")
+cat("  5. ✓ Sr Anomalies (Deviation from Mean)\n\n")
+
+cat("════════════════════════════════════════════════════════════════════\n\n")
+
+cat("🎉 Sr ISOSCAPE - CENTRAL EUROPE - COMPLETE!\n\n")
