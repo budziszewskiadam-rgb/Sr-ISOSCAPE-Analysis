@@ -1,1 +1,10 @@
-requirements.txt
+terra>=1.8.0
+sf>=1.0.0
+rnaturalearth>=0.3.0
+dplyr>=1.0.0
+tidyr>=1.0.0
+randomForest>=4.7.0
+caret>=6.0.0
+ggplot2>=3.3.0
+viridis>=0.6.0
+R>=4.0.0
